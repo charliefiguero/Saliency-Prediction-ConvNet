@@ -1,0 +1,10 @@
+# Ignores everything
+**
+*/.DS_Store
+
+# Whitelist:
+!*/
+!/scripts/train_cifar.py
+!/scripts/train_cifar.sh
+!README.md
+!.gitignore
