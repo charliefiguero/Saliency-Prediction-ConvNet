@@ -91,8 +91,13 @@ else:
 
 
 def main(args):
-    train_dataset = dataset.Salicon("ADL CW/train.pkl")
-    test_dataset = dataset.Salicon("ADL CW/val.pkl")
+    try:
+        train_dataset = dataset.Salicon("/mnt/storage/scratch/wp13824/adl-2020/train.pkl")
+        test_dataset = dataset.Salicon("/mnt/storage/scratch/wp13824/adl-2020/val.pkl")
+    except:
+        train_dataset = dataset.Salicon("ADL CW/train.pkl")
+        test_dataset = dataset.Salicon("ADL CW/val.pkl")
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         shuffle=True,
@@ -332,9 +337,10 @@ class Trainer:
                 results["preds"].extend(list(preds))
                 results["labels"].extend(list(labels.cpu().numpy()))
 
-        accuracy = compute_accuracy(
-            np.array(results["labels"]), np.array(results["preds"])
-        )
+        # accuracy = compute_accuracy(
+        #     np.array(results["labels"]), np.array(results["preds"])
+        # )
+        accuracy = evaluation.cc(np.array(results["preds"]), np.array(results["labels"]))
         average_loss = total_loss / len(self.val_loader)
 
         self.summary_writer.add_scalars(
@@ -386,5 +392,3 @@ def get_summary_writer_log_dir(args: argparse.Namespace) -> str:
 
 if __name__ == "__main__":
     main(parser.parse_args())
-
-print("hello")
