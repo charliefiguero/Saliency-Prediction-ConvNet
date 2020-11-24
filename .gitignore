@@ -4,7 +4,7 @@
 
 # Whitelist:
 !*/
-!/scripts/train_cifar.py
-!/scripts/train_cifar.sh
+!/scripts/train_salicon.py
+!/scripts/train_salicon.sh
 !README.md
 !.gitignore
