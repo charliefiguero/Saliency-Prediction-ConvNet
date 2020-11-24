@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import time
 import sys
+import os
 from multiprocessing import cpu_count
 from typing import Union, NamedTuple
 
@@ -18,13 +19,21 @@ from torchvision import transforms
 import argparse
 from pathlib import Path
 
+# importing dataset which will unpickle the SALICON data, ready to be passed to a torch Dataloader.
+# path needs to change
+# sys.path.append(Path.cwd() / "Documents" / "Saliency-Prediction-ConvNet" / "ADL CW")
+sys.path.append("/Users/charlesfiguero/Documents/Saliency-Prediction-ConvNet/ADL CW")
+import dataset
+
 torch.backends.cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(
     description="Train a shallow saliency prediction covnet on the SALICON dataset.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
-default_dataset_dir = Path.home() / ".cache" / "torch" / "datasets"
+
+# print(os.getcwd())
+default_dataset_dir = Path.cwd() / ".." / "ADL CW"
 parser.add_argument("--dataset-root", default=default_dataset_dir)
 parser.add_argument("--log-dir", default=Path("logs"), type=Path)
 parser.add_argument("--learning-rate", default=1e-2, type=float, help="Learning rate")
@@ -80,14 +89,8 @@ else:
 
 
 def main(args):
-    transform = transforms.ToTensor()
-    args.dataset_root.mkdir(parents=True, exist_ok=True)
-    train_dataset = torchvision.datasets.CIFAR10(
-        args.dataset_root, train=True, download=True, transform=transform
-    )
-    test_dataset = torchvision.datasets.CIFAR10(
-        args.dataset_root, train=False, download=False, transform=transform
-    )
+    train_dataset = dataset.Salicon("ADL CW/train.pkl")
+    test_dataset = dataset.Salicon("ADL CW/val.pkl")
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         shuffle=True,
@@ -103,38 +106,35 @@ def main(args):
         pin_memory=True,
     )
 
-    print(train_dataset[0])
-
-    # model = CNN(height=32, width=32, channels=3, class_count=10)
-
+    model = CNN(height=32, width=32, channels=3, class_count=10)
     # criterion = nn.CrossEntropyLoss()
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
-    # optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
+    log_dir = get_summary_writer_log_dir(args)
+    print(f"Writing logs to {log_dir}")
+    summary_writer = SummaryWriter(
+            str(log_dir),
+            flush_secs=5
+    )
+    trainer = Trainer(
+        model, train_loader, test_loader, criterion, optimizer, summary_writer, DEVICE
+    )
 
-    # log_dir = get_summary_writer_log_dir(args)
-    # print(f"Writing logs to {log_dir}")
-    # summary_writer = SummaryWriter(
-    #         str(log_dir),
-    #         flush_secs=5
-    # )
-    # trainer = Trainer(
-    #     model, train_loader, test_loader, criterion, optimizer, summary_writer, DEVICE
-    # )
+    trainer.train(
+        args.epochs,
+        args.val_frequency,
+        print_frequency=args.print_frequency,
+        log_frequency=args.log_frequency,
+    )
 
-    # trainer.train(
-    #     args.epochs,
-    #     args.val_frequency,
-    #     print_frequency=args.print_frequency,
-    #     log_frequency=args.log_frequency,
-    # )
-
-    # summary_writer.close()
+    summary_writer.close()
 
 
 class CNN(nn.Module):
     def __init__(self, 
-                 height: int = 32,
-                 width: int = 32,
+                 height: int = 96,
+                 width: int = 96,
                  channels: int = 3,
                  class_count: int = 10):
         super().__init__()
@@ -153,27 +153,48 @@ class CNN(nn.Module):
         self.conv2 = nn.Conv2d(
             in_channels=32,
             out_channels=64,
-            kernel_size=(5, 5),
-            padding=(2, 2),
+            kernel_size=(3, 3),
+            padding=(1, 1),
         )
         self.initialise_layer(self.conv2)
 
-        self.pool2 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.pool2 = nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2))
 
-        self.fc1 = nn.Linear(4096, 1024)
+        self.conv3 = nn.Conv2d(
+            in_channels=64,
+            out_channels=128,
+            kernel_size=(3, 3),
+            padding=(1, 1),
+        )
+        self.initialise_layer(self.conv3)
+
+        self.pool3 = nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2))
+
+        self.fc1 = nn.Linear(11*11*128*128, 4608)
         self.initialise_layer(self.fc1)
 
-        self.fc2 = nn.Linear(1024, 10)
+        self.fc2 = nn.Linear(4608, 2304)
         self.initialise_layer(self.fc2)
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
-        x = F.relu(self.conv1(images))
+        x = self.conv1(images)
+        print(x.shape)
         x = self.pool1(x)
-        x = F.relu(self.conv2(x))
+        print(x.shape)
+        x = self.conv2(x)
+        print(x.shape)
         x = self.pool2(x)
-        x = torch.flatten(x, start_dim=1)
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        print(x.shape)
+        x = self.conv3(x)
+        print(x.shape)
+        x = self.pool3(x)
+        print(x.shape)
+        x = torch.flatten(x, start_dim=0)
+        print(x.shape)
+        x = self.fc1(x)
+        print(x.shape)
+        x = F.relu(self.fc2(x))
+        print(x.shape)
         return x
 
     @staticmethod
@@ -221,7 +242,10 @@ class Trainer:
                 labels = labels.to(self.device)
                 data_load_end_time = time.time()
 
+
                 logits = self.model.forward(batch)
+                print(logits.shape)
+                print(labels.shape)
                 loss = self.criterion(logits, labels)
 
                 loss.backward()
