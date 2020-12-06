@@ -2,8 +2,7 @@
 **
 */.DS_Store
 
-# Whitelist:
-!*/
+# WHITELIST:
 !/scripts/train_salicon.py
 !/scripts/train_salicon.sh
 !README.md
