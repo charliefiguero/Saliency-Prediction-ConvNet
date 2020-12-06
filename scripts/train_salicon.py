@@ -193,7 +193,8 @@ class CNN(nn.Module):
         x = self.pool3(x)
         # Flatten the output of the pooling layer so it is of shape (batch_size, 4096)    
         x = torch.flatten(x, start_dim=1)
-        x = self.fc1(x)
+        # x = self.fc1(x)
+        x = F.relu(self.fc1(x))
         # x = F.relu(self.fc2(x))
         x = self.fc2(x)
         return x
@@ -333,7 +334,8 @@ class Trainer:
                 logits = self.model(batch)
                 loss = self.criterion(logits, labels)
                 total_loss += loss.item()
-                preds = logits.argmax(dim=-1).cpu().numpy()
+                # preds = logits.argmax(dim=-1).cpu().numpy()
+                preds = logits.cpu().numpy()
                 results["preds"].extend(list(preds))
                 results["labels"].extend(list(labels.cpu().numpy()))
 
