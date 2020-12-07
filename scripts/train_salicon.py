@@ -20,12 +20,24 @@ from torchvision import transforms
 import argparse
 from pathlib import Path
 
+# from evalutaion.py
+import pickle
+from PIL import Image
+from scipy import ndimage
+
+from datetime import datetime
+
 # importing dataset which will unpickle the SALICON data, ready to be passed to a torch Dataloader.
 # path needs to change
 # sys.path.append(Path.cwd() / "Documents" / "Saliency-Prediction-ConvNet" / "ADL CW")
 sys.path.append("/Users/charlesfiguero/Documents/Saliency-Prediction-ConvNet/ADL CW")
 import dataset
 import evaluation
+
+now = datetime.now()
+current_time = now.strftime("%H-%M-%S")
+model_dir_path = "/mnt/storage/home/cf17559/cw/model_"+current_time
+print("Current Time =", current_time)
 
 torch.backends.cudnn.benchmark = True
 
@@ -47,7 +59,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--epochs",
-    default=20,
+    default=100,
     type=int,
     help="Number of epochs (passes through the entire dataset) to train for",
 )
@@ -89,14 +101,19 @@ if torch.cuda.is_available():
 else:
     DEVICE = torch.device("cpu")
 
+def normalize_map(s_map):
+    norm_s_map = (s_map - np.min(s_map)) / (np.max(s_map) - np.min(s_map))
+    return norm_s_map
 
 def main(args):
+    os.mkdir(model_dir_path)
+
     try:
         train_dataset = dataset.Salicon("/mnt/storage/scratch/wp13824/adl-2020/train.pkl")
         test_dataset = dataset.Salicon("/mnt/storage/scratch/wp13824/adl-2020/val.pkl")
     except:
-        train_dataset = dataset.Salicon("ADL CW/train.pkl")
-        test_dataset = dataset.Salicon("ADL CW/val.pkl")
+        train_dataset = dataset.Salicon("../ADL CW/train.pkl")
+        test_dataset = dataset.Salicon("../ADL CW/val.pkl")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -181,7 +198,7 @@ class CNN(nn.Module):
         self.fc1 = nn.Linear(11*11*128, 4608) # check why we get 11x11 and paper gets 10x10
         self.initialise_layer(self.fc1)
 
-        self.fc2 = nn.Linear(4608, 2304)
+        self.fc2 = nn.Linear(2304, 2304)
         self.initialise_layer(self.fc2)
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
@@ -191,12 +208,16 @@ class CNN(nn.Module):
         x = self.pool2(x)
         x = self.conv3(x)
         x = self.pool3(x)
+
         # Flatten the output of the pooling layer so it is of shape (batch_size, 4096)    
         x = torch.flatten(x, start_dim=1)
-        # x = self.fc1(x)
-        x = F.relu(self.fc1(x))
-        # x = F.relu(self.fc2(x))
-        x = self.fc2(x)
+        x = self.fc1(x)
+
+        # MAXOUT
+        x = torch.reshape(x, (2, x.shape[0], 2304))
+        x = torch.max(x, dim=0).values
+
+        x = F.relu(self.fc2(x))
         return x
 
     @staticmethod
@@ -226,17 +247,6 @@ class Trainer:
         self.optimizer = optimizer
         self.summary_writer = summary_writer
         self.step = 0
-    
-    def my_cc(self, s_map, gt):
-        print(s_map.shape)
-        print(gt.shape)
-
-        s_map_norm = (s_map - torch.mean(s_map)) / torch.std(s_map)
-        gt_norm = (gt - torch.mean(gt)) / torch.std(gt)
-        a = s_map_norm
-        b = gt_norm
-        r = (a * b).sum() / math.sqrt((a * a).sum() * (b * b).sum())
-        return r
 
     def train(
         self,
@@ -248,15 +258,13 @@ class Trainer:
     ):
         self.model.train()
         for epoch in range(start_epoch, epochs):
-            self.model.train()
             data_load_start_time = time.time()
             for batch, labels in self.train_loader:
                 batch = batch.to(self.device)
                 labels = labels.to(self.device)
                 data_load_end_time = time.time()
 
-
-                logits = self.model.forward(batch)
+                logits = self.model(batch)
 
                 loss = self.criterion(logits, labels)
 
@@ -265,20 +273,14 @@ class Trainer:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                with torch.no_grad():
-                    # preds = logits.argmax(-1)
-                    # print(preds.shape)
-                    preds = logits
-                    # print(preds.shape)
-                    accuracy = self.my_cc(preds,labels)
-                    # accuracy = compute_accuracy(labels, preds) # try switching around?
-
                 data_load_time = data_load_end_time - data_load_start_time
                 step_time = time.time() - data_load_end_time
                 if ((self.step + 1) % log_frequency) == 0:
-                    self.log_metrics(epoch, accuracy, loss, data_load_time, step_time)
+                    self.log_metrics(epoch, loss, data_load_time, step_time)
+                    # self.log_metrics(epoch, accuracy, loss, data_load_time, step_time)
                 if ((self.step + 1) % print_frequency) == 0:
-                    self.print_metrics(epoch, accuracy, loss, data_load_time, step_time)
+                    self.print_metrics(epoch, loss, data_load_time, step_time)
+                    # self.print_metrics(epoch, accuracy, loss, data_load_time, step_time)
 
                 self.step += 1
                 data_load_start_time = time.time()
@@ -286,29 +288,26 @@ class Trainer:
             self.summary_writer.add_scalar("epoch", epoch, self.step)
             if ((epoch + 1) % val_frequency) == 0:
                 self.validate()
+                
+                torch.save(self.model, model_dir_path+"/model"+str(epoch)+".pth")
+
                 # self.validate() will put the model in validation mode,
                 # so we have to switch back to train mode afterwards
                 self.model.train()
 
-    def print_metrics(self, epoch, accuracy, loss, data_load_time, step_time):
+    def print_metrics(self, epoch, loss, data_load_time, step_time):
         epoch_step = self.step % len(self.train_loader)
         print(
                 f"epoch: [{epoch}], "
                 f"step: [{epoch_step}/{len(self.train_loader)}], "
                 f"batch loss: {loss:.5f}, "
-                f"batch accuracy: {accuracy * 100:2.2f}, "
                 f"data load time: "
                 f"{data_load_time:.5f}, "
                 f"step time: {step_time:.5f}"
         )
 
-    def log_metrics(self, epoch, accuracy, loss, data_load_time, step_time):
+    def log_metrics(self, epoch, loss, data_load_time, step_time):
         self.summary_writer.add_scalar("epoch", epoch, self.step)
-        self.summary_writer.add_scalars(
-                "accuracy",
-                {"train": accuracy},
-                self.step
-        )
         self.summary_writer.add_scalars(
                 "loss",
                 {"train": float(loss.item())},
@@ -329,46 +328,20 @@ class Trainer:
         # No need to track gradients for validation, we're not optimizing.
         with torch.no_grad():
             for batch, labels in self.val_loader:
+
                 batch = batch.to(self.device)
                 labels = labels.to(self.device)
                 logits = self.model(batch)
                 loss = self.criterion(logits, labels)
                 total_loss += loss.item()
-                # preds = logits.argmax(dim=-1).cpu().numpy()
-                preds = logits.cpu().numpy()
-                results["preds"].extend(list(preds))
-                results["labels"].extend(list(labels.cpu().numpy()))
 
-        # accuracy = compute_accuracy(
-        #     np.array(results["labels"]), np.array(results["preds"])
-        # )
-        accuracy = evaluation.cc(np.array(results["preds"]), np.array(results["labels"]))
         average_loss = total_loss / len(self.val_loader)
 
-        self.summary_writer.add_scalars(
-                "accuracy",
-                {"test": accuracy},
-                self.step
-        )
         self.summary_writer.add_scalars(
                 "loss",
                 {"test": average_loss},
                 self.step
         )
-        print(f"validation loss: {average_loss:.5f}, accuracy: {accuracy * 100:2.2f}")
-
-
-def compute_accuracy(
-    labels: Union[torch.Tensor, np.ndarray], preds: Union[torch.Tensor, np.ndarray]
-) -> float:
-    """
-    Args:
-        labels: ``(batch_size, class_count)`` tensor or array containing example labels
-        preds: ``(batch_size, class_count)`` tensor or array containing model prediction
-    """
-    assert len(labels) == len(preds)
-    return float((labels == preds).sum()) / len(labels)
-
 
 def get_summary_writer_log_dir(args: argparse.Namespace) -> str:
     """Get a unique directory that hasn't been logged to before for use with a TB
@@ -392,5 +365,8 @@ def get_summary_writer_log_dir(args: argparse.Namespace) -> str:
     return str(tb_log_dir)
 
 
+
 if __name__ == "__main__":
     main(parser.parse_args())
+
+
