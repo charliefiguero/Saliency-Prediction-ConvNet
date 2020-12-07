@@ -3,8 +3,8 @@
 */.DS_Store
 
 # WHITELIST:
+!.gitignore
 !/scripts/train_salicon.py
 !/scripts/train_salicon.sh
 !/scripts/validate_model.py
 !README.md
-!.gitignore
