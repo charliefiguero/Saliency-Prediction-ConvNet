@@ -30,7 +30,7 @@ sys.path.append("/Users/charlesfiguero/Documents/Saliency-Prediction-ConvNet/ADL
 import dataset
 import evaluation
 
-from train_salicon import CNN
+from train_salicon_plus import CNN
 
 torch.backends.cudnn.benchmark = True
 

@@ -289,7 +289,7 @@ class Trainer:
             if ((epoch + 1) % val_frequency) == 0:
                 self.validate()
                 
-                torch.save(self.model, model_dir_path+"/model"+str(epoch)+".pth")
+                torch.save(self.model, model_dir_path+"/model_"+str(epoch)+".pth")
 
                 # self.validate() will put the model in validation mode,
                 # so we have to switch back to train mode afterwards
