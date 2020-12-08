@@ -215,7 +215,7 @@ class CNN(nn.Module):
 
         # MAXOUT
         x = torch.reshape(x, (2, x.shape[0], 2304))
-        x = torch.max(x, dim=0).values
+        x = F.relu(torch.max(x, dim=0).values)
 
         x = F.relu(self.fc2(x))
         return x

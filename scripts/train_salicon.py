@@ -215,7 +215,7 @@ class CNN(nn.Module):
 
         # MAXOUT
         x = torch.reshape(x, (2, x.shape[0], 2304))
-        x = torch.max(x, dim=0).values
+        x = F.relu(torch.max(x, dim=0).values)
 
         x = F.relu(self.fc2(x))
         return x
@@ -223,9 +223,9 @@ class CNN(nn.Module):
     @staticmethod
     def initialise_layer(layer):
         if hasattr(layer, "bias"):
-            nn.init.zeros_(layer.bias)
+            nn.init.constant_(layer.bias, val=0.1)
         if hasattr(layer, "weight"):
-            nn.init.kaiming_normal_(layer.weight)
+            nn.init.normal_(layer.weight, mean=0, std=0.01)
 
 
 class Trainer:
@@ -289,7 +289,7 @@ class Trainer:
             if ((epoch + 1) % val_frequency) == 0:
                 self.validate()
                 
-                torch.save(self.model, model_dir_path+"/model"+str(epoch)+".pth")
+                torch.save(self.model, model_dir_path+"/model_"+str(epoch)+".pth")
 
                 # self.validate() will put the model in validation mode,
                 # so we have to switch back to train mode afterwards

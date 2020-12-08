@@ -93,6 +93,7 @@ def validate(model, val_loader):
         pred = Image.fromarray((pred * 255).astype(np.uint8)).resize((gt.shape[1], gt.shape[0]))
         pred = np.asarray(pred, dtype='float32') / 255.
         pred = ndimage.gaussian_filter(pred, sigma=2)
+        # pred_blur = ndimage.gaussian_filter(pred, sigma=19)
 
         #cc
         cc_scores.append(evaluation.cc(pred, gt))
