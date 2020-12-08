@@ -30,7 +30,7 @@ sys.path.append("/Users/charlesfiguero/Documents/Saliency-Prediction-ConvNet/ADL
 import dataset
 import evaluation
 
-from train_salicon_plus import CNN
+from train_salicon import CNN
 
 torch.backends.cudnn.benchmark = True
 
@@ -60,7 +60,7 @@ def main():
         pin_memory=True,
     )
 
-    model = torch.load('models/model1.pth')
+    model = torch.load('model_22-00-56/model_99.pth')
 
     validate(model, test_loader)
 

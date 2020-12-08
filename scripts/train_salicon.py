@@ -130,7 +130,7 @@ def main(args):
         pin_memory=True,
     )
 
-    model = CNN(height=32, width=32, channels=3, class_count=2304)
+    model = CNN(height=96, width=96, channels=3, class_count=2304)
     # criterion = nn.CrossEntropyLoss()
     criterion = nn.MSELoss()
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
@@ -202,11 +202,11 @@ class CNN(nn.Module):
         self.initialise_layer(self.fc2)
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
-        x = self.conv1(images)
+        x = F.relu(self.conv1(images))
         x = self.pool1(x)
-        x = self.conv2(x)
+        x = F.relu(self.conv2(x))
         x = self.pool2(x)
-        x = self.conv3(x)
+        x = F.relu(self.conv3(x))
         x = self.pool3(x)
 
         # Flatten the output of the pooling layer so it is of shape (batch_size, 4096)    
@@ -214,10 +214,14 @@ class CNN(nn.Module):
         x = self.fc1(x)
 
         # MAXOUT
-        x = torch.reshape(x, (2, x.shape[0], 2304))
-        x = F.relu(torch.max(x, dim=0).values)
+        # x = torch.reshape(x, (2, x.shape[0], 2304))
+        # x = F.relu(torch.max(x, dim=0).values)
+        x = x.reshape(x.shape[0], 2304, 2)
+        x = torch.max(x, 2)[0]
+        x = F.relu(x)
 
-        x = F.relu(self.fc2(x))
+        x = self.fc2(x)
+        # x = F.relu(self.fc2(x))
         return x
 
     @staticmethod
@@ -286,14 +290,13 @@ class Trainer:
                 data_load_start_time = time.time()
 
             self.summary_writer.add_scalar("epoch", epoch, self.step)
-            if ((epoch + 1) % val_frequency) == 0:
+            if ((epoch + 1) % 2) == 0:
                 self.validate()
-                
-                torch.save(self.model, model_dir_path+"/model_"+str(epoch)+".pth")
-
                 # self.validate() will put the model in validation mode,
                 # so we have to switch back to train mode afterwards
                 self.model.train()
+            if ((epoch + 1) % val_frequency) == 0:
+                torch.save(self.model, model_dir_path+"/model_"+str(epoch)+".pth")
 
     def print_metrics(self, epoch, loss, data_load_time, step_time):
         epoch_step = self.step % len(self.train_loader)
@@ -328,7 +331,6 @@ class Trainer:
         # No need to track gradients for validation, we're not optimizing.
         with torch.no_grad():
             for batch, labels in self.val_loader:
-
                 batch = batch.to(self.device)
                 labels = labels.to(self.device)
                 logits = self.model(batch)
