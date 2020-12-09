@@ -72,7 +72,6 @@ def visualise_filters(model):
     plt.imshow(filter_img.permute(1, 2, 0))
 
     plt.savefig('conv1_filters.png')
-    # img = plt.savefig(kernels, 'conv1_filters.png', nrow=6)
 
 def visualise(model, val_loader):
     preds = []
@@ -90,9 +89,6 @@ def visualise(model, val_loader):
         gts = pickle.load(f)
         
     index = np.random.randint(0, len(preds), size=3) #get indices for 3 random images
-    # print(index.shape)
-    # print(index[0])
-    # print(index)
 
     outputs = []
     for idx in index:

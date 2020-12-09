@@ -44,9 +44,6 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
 
-# print(os.getcwd())
-# default_dataset_dir = Path.cwd() / ".." / "ADL CW"
-# parser.add_argument("--dataset-root", default=default_dataset_dir)
 parser.add_argument("--log-dir", default=Path("logs"), type=Path)
 parser.add_argument("--learning-rate", default=0.01, type=float, help="Learning rate")
 parser.add_argument(
@@ -147,7 +144,6 @@ def main(args):
 
     summary_writer.close()
 
-
 class CNN(nn.Module):
     def __init__(self, 
                  height: int = 96,
@@ -163,6 +159,7 @@ class CNN(nn.Module):
             padding=2,
         )
         self.initialise_layer(self.conv1)
+
         self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
 
         self.conv2 = nn.Conv2d(
@@ -186,7 +183,6 @@ class CNN(nn.Module):
         self.pool3 = nn.MaxPool2d(kernel_size=(3, 3), stride=2)
 
         self.fc1 = nn.Linear(11*11*128, 4608) # check why we get 11x11 and paper gets 10x10
-        # self.fc1 = nn.Linear(73728, 4608)
         self.initialise_layer(self.fc1)
 
         self.fc2 = nn.Linear(2304, 2304)
@@ -218,15 +214,9 @@ class CNN(nn.Module):
     @staticmethod
     def initialise_layer(layer):
         if hasattr(layer, "bias"):
-            # layer.bias.fill_(0.1)
             layer.bias.data.fill_(0.1)
-            # layer.bias = nn.init.constant_(val=0.1)
         if hasattr(layer, "weight"):
-            # layer.weight = layer.weight.normalise_(mean=0, std=0.01)
-            # layer.weight.normalise_(mean=0, std=0.01)
             layer.weight.data.normal_(0.0, 0.01)
-            # layer.weight = nn.init.normal_(mean=0, std=0.01)
-
 
 class Trainer:
     def __init__(
@@ -373,5 +363,3 @@ def get_summary_writer_log_dir(args: argparse.Namespace) -> str:
 
 if __name__ == "__main__":
     main(parser.parse_args())
-
-
