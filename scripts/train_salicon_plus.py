@@ -30,7 +30,7 @@ from datetime import datetime
 # importing dataset which will unpickle the SALICON data, ready to be passed to a torch Dataloader.
 # path needs to change
 # sys.path.append(Path.cwd() / "Documents" / "Saliency-Prediction-ConvNet" / "ADL CW")
-sys.path.append("/Users/charlesfiguero/Documents/Saliency-Prediction-ConvNet/ADL CW")
+# sys.path.append("/Users/charlesfiguero/Documents/Saliency-Prediction-ConvNet/ADL CW")
 import dataset
 import evaluation
 
@@ -47,10 +47,10 @@ parser = argparse.ArgumentParser(
 )
 
 # print(os.getcwd())
-default_dataset_dir = Path.cwd() / ".." / "ADL CW"
-parser.add_argument("--dataset-root", default=default_dataset_dir)
+# default_dataset_dir = Path.cwd() / ".." / "ADL CW"
+# parser.add_argument("--dataset-root", default=default_dataset_dir)
 parser.add_argument("--log-dir", default=Path("logs"), type=Path)
-parser.add_argument("--learning-rate", default=1e-2, type=float, help="Learning rate")
+parser.add_argument("--learning-rate", default=0.01, type=float, help="Learning rate")
 parser.add_argument(
     "--batch-size",
     default=128,
@@ -89,12 +89,10 @@ parser.add_argument(
     help="Number of worker processes used to load data.",
 )
 
-
 class ImageShape(NamedTuple):
     height: int
     width: int
     channels: int
-
 
 if torch.cuda.is_available():
     DEVICE = torch.device("cuda")
@@ -108,12 +106,8 @@ def normalize_map(s_map):
 def main(args):
     os.mkdir(model_dir_path)
 
-    try:
-        train_dataset = dataset.Salicon("/mnt/storage/scratch/wp13824/adl-2020/train.pkl")
-        test_dataset = dataset.Salicon("/mnt/storage/scratch/wp13824/adl-2020/val.pkl")
-    except:
-        train_dataset = dataset.Salicon("../ADL CW/train.pkl")
-        test_dataset = dataset.Salicon("../ADL CW/val.pkl")
+    train_dataset = dataset.Salicon("/mnt/storage/scratch/wp13824/adl-2020/train.pkl")
+    test_dataset = dataset.Salicon("/mnt/storage/scratch/wp13824/adl-2020/val.pkl")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -130,11 +124,11 @@ def main(args):
         pin_memory=True,
     )
 
-    model = CNN(height=32, width=32, channels=3, class_count=2304)
+    model = CNN(height=96, width=96, channels=3)
+    
     # criterion = nn.CrossEntropyLoss()
     criterion = nn.MSELoss()
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=0.0005)
 
     log_dir = get_summary_writer_log_dir(args)
     print(f"Writing logs to {log_dir}")
@@ -143,7 +137,7 @@ def main(args):
             flush_secs=5
     )
     trainer = Trainer(
-        model, train_loader, test_loader, criterion, optimizer, summary_writer, DEVICE
+        model, train_loader, test_loader, criterion, summary_writer, DEVICE
     )
 
     trainer.train(
@@ -160,42 +154,41 @@ class CNN(nn.Module):
     def __init__(self, 
                  height: int = 96,
                  width: int = 96,
-                 channels: int = 3,
-                 class_count: int = 2304):
+                 channels: int = 3):
         super().__init__()
         self.input_shape = ImageShape(height=height, width=width, channels=channels)
-        self.class_count = class_count
 
         self.conv1 = nn.Conv2d(
             in_channels=self.input_shape.channels,
             out_channels=32,
             kernel_size=(5, 5),
-            padding=(2, 2),
+            padding=2,
         )
         self.initialise_layer(self.conv1)
-        self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
 
         self.conv2 = nn.Conv2d(
             in_channels=32,
             out_channels=64,
             kernel_size=(3, 3),
-            padding=(1, 1),
+            padding=1,
         )
         self.initialise_layer(self.conv2)
 
-        self.pool2 = nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2))
+        self.pool2 = nn.MaxPool2d(kernel_size=(3, 3), stride=2)
 
         self.conv3 = nn.Conv2d(
             in_channels=64,
             out_channels=128,
             kernel_size=(3, 3),
-            padding=(1, 1),
+            padding=1,
         )
         self.initialise_layer(self.conv3)
 
-        self.pool3 = nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2))
+        self.pool3 = nn.MaxPool2d(kernel_size=(3, 3), stride=2)
 
         self.fc1 = nn.Linear(11*11*128, 4608) # check why we get 11x11 and paper gets 10x10
+        # self.fc1 = nn.Linear(73728, 4608)
         self.initialise_layer(self.fc1)
 
         self.fc2 = nn.Linear(2304, 2304)
@@ -203,10 +196,13 @@ class CNN(nn.Module):
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         x = self.conv1(images)
+        x = F.relu(x)
         x = self.pool1(x)
         x = self.conv2(x)
+        x = F.relu(x)
         x = self.pool2(x)
         x = self.conv3(x)
+        x = F.relu(x)
         x = self.pool3(x)
 
         # Flatten the output of the pooling layer so it is of shape (batch_size, 4096)    
@@ -214,18 +210,32 @@ class CNN(nn.Module):
         x = self.fc1(x)
 
         # MAXOUT
-        x = torch.reshape(x, (2, x.shape[0], 2304))
-        x = F.relu(torch.max(x, dim=0).values)
+        # x = torch.reshape(x, (2, x.shape[0], 2304))
+        # x = F.relu(torch.max(x, dim=0).values)
+        x = x.reshape(x.shape[0], 2304, 2)
+        x = torch.max(x, 2)[0]
+        # split = x.shape[1]//2
+        # a = x[:,:split]
+        # b = x[:,split:]
+        # x = a.max(b)
+        x = F.relu(x)
 
-        x = F.relu(self.fc2(x))
+        x = self.fc2(x)
+        # x = F.relu(x)
+        # x = F.relu(self.fc2(x))
         return x
 
     @staticmethod
     def initialise_layer(layer):
         if hasattr(layer, "bias"):
-            nn.init.zeros_(layer.bias)
+            # layer.bias.fill_(0.1)
+            layer.bias.data.fill_(0.1)
+            # layer.bias = nn.init.constant_(val=0.1)
         if hasattr(layer, "weight"):
-            nn.init.kaiming_normal_(layer.weight)
+            # layer.weight = layer.weight.normalise_(mean=0, std=0.01)
+            # layer.weight.normalise_(mean=0, std=0.01)
+            layer.weight.data.normal_(0.0, 0.01)
+            # layer.weight = nn.init.normal_(mean=0, std=0.01)
 
 
 class Trainer:
@@ -235,7 +245,6 @@ class Trainer:
         train_loader: DataLoader,
         val_loader: DataLoader,
         criterion: nn.Module,
-        optimizer: Optimizer,
         summary_writer: SummaryWriter,
         device: torch.device,
     ):
@@ -244,7 +253,7 @@ class Trainer:
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.criterion = criterion
-        self.optimizer = optimizer
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.03, weight_decay=0.0005)
         self.summary_writer = summary_writer
         self.step = 0
 
@@ -256,22 +265,27 @@ class Trainer:
         log_frequency: int = 5,
         start_epoch: int = 0
     ):
-        self.model.train()
+        learning_rates = np.linspace(0.01, 0.00003,epochs)
         for epoch in range(start_epoch, epochs):
+            self.model.train()
             data_load_start_time = time.time()
             for batch, labels in self.train_loader:
+                opt = self.optimizer.state_dict()
+                self.optimizer = torch.optim.SGD(self.model.parameters(), lr=learning_rates[epoch], weight_decay=0.0005)
+                self.optimizer.load_state_dict(opt)
+
                 batch = batch.to(self.device)
                 labels = labels.to(self.device)
                 data_load_end_time = time.time()
 
-                logits = self.model(batch)
+                self.optimizer.zero_grad()
+                logits = self.model.forward(batch)
 
                 loss = self.criterion(logits, labels)
 
                 loss.backward()
 
                 self.optimizer.step()
-                self.optimizer.zero_grad()
 
                 data_load_time = data_load_end_time - data_load_start_time
                 step_time = time.time() - data_load_end_time
@@ -286,10 +300,13 @@ class Trainer:
                 data_load_start_time = time.time()
 
             self.summary_writer.add_scalar("epoch", epoch, self.step)
-            if ((epoch + 1) % val_frequency) == 0:
+            if ((epoch + 1) % 2) == 0:
                 self.validate()
-                
-                torch.save(self.model, model_dir_path+"/model_"+str(epoch)+".pth")
+                # self.validate() will put the model in validation mode,
+                # so we have to switch back to train mode afterwards
+                self.model.train()
+            if ((epoch + 1) % val_frequency) == 0:           
+                torch.save(self.model, model_dir_path+"/model_"+str(epoch)+".pkl")
 
                 # self.validate() will put the model in validation mode,
                 # so we have to switch back to train mode afterwards

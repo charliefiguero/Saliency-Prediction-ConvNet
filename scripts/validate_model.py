@@ -60,7 +60,7 @@ def main():
         pin_memory=True,
     )
 
-    model = torch.load('model_22-00-56/model_99.pth')
+    model = torch.load('model_22-00-56/model_99.pkl')
 
     validate(model, test_loader)
 
@@ -72,7 +72,6 @@ def validate(model, val_loader):
     # No need to track gradients for validation, we're not optimizing.
     with torch.no_grad():
         for batch, labels in val_loader:
-
             batch = batch.to(DEVICE)
             labels = labels.to(DEVICE)
             logits = model(batch)
