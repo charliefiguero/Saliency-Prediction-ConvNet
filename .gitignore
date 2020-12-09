@@ -5,6 +5,7 @@
 # WHITELIST:
 !.gitignore
 !/scripts
+!/scripts/visualise_model.py
 !/scripts/train_salicon.py
 !/scripts/train_salicon_plus.py
 !/scripts/train_salicon.sh

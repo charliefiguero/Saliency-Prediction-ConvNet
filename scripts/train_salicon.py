@@ -29,8 +29,6 @@ from datetime import datetime
 
 # importing dataset which will unpickle the SALICON data, ready to be passed to a torch Dataloader.
 # path needs to change
-# sys.path.append(Path.cwd() / "Documents" / "Saliency-Prediction-ConvNet" / "ADL CW")
-# sys.path.append("/Users/charlesfiguero/Documents/Saliency-Prediction-ConvNet/ADL CW")
 import dataset
 import evaluation
 
