@@ -245,7 +245,7 @@ class Trainer:
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.criterion = criterion
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.03, weight_decay=0.0005)
+        self.optimizer = torch.optim.SGD(self.model.parameters(), nesterov=True, momentum=0.9, lr=0.03, weight_decay=0.0005)
         self.summary_writer = summary_writer
         self.step = 0
 
@@ -262,6 +262,7 @@ class Trainer:
             self.model.train()
             data_load_start_time = time.time()
             for batch, labels in self.train_loader:
+                
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] = learning_rates[epoch]
 
