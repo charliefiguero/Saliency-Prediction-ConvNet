@@ -56,24 +56,29 @@ def main():
         pin_memory=True,
     )
 
-    model = torch.load('model_04-51-03/model_999.pkl')
+    model = torch.load('model_13-53-55/model_999.pkl')
     
-    visualise(model, test_loader)
-    visualise_filters(model)
+    visualise(model, test_loader, "repli_vis_0")
+    visualise(model, test_loader, "repli_vis_1")
+    visualise(model, test_loader, "repli_vis_2")
+    visTensor(model.conv1.weight.detach().cpu().clone())
 
-def visualise_filters(model):
-    kernels = model.conv1.weight.detach().cpu().clone()
-    model.eval()
-    print(kernels.size())
+def visTensor(tensor, ch=0, allkernels=False, nrow=8, padding=1): 
 
-    kernels = kernels - kernels.min()
-    kernels = kernels / kernels.max()
-    filter_img = torchvision.utils.make_grid(kernels, nrow=6)
-    plt.imshow(filter_img.permute(1, 2, 0))
+    fig, ax = plt.subplots(nrows=6,ncols=6,figsize=(16,12))
+    
+    n,c,w,h = tensor.shape
 
+    if allkernels: tensor = tensor.view(n*c, -1, w, h)
+    elif c != 3: tensor = tensor[:,ch,:,:].unsqueeze(dim=1)
+
+    rows = np.min((tensor.shape[0] // nrow + 1, 64))    
+    grid = utils.make_grid(tensor, nrow=nrow, normalize=True, padding=padding)
+    plt.figure( figsize=(nrow,rows) )
+    plt.imshow(grid.numpy().transpose((1, 2, 0)))
     plt.savefig('conv1_filters.png')
 
-def visualise(model, val_loader):
+def visualise(model, val_loader, fig_name):
     preds = []
     model.eval()
 
@@ -120,7 +125,7 @@ def visualise(model, val_loader):
     for i, axi in enumerate(ax.flat):
         axi.imshow(outputs[i])
     
-    outpath = os.path.join(dir_path, "output_vis.jpg")
+    outpath = os.path.join(dir_path, fig_name+".jpg")
     plt.savefig(outpath)
 
 if __name__ == "__main__":

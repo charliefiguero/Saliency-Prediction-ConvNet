@@ -121,9 +121,7 @@ def main(args):
 
     model = CNN(height=96, width=96, channels=3)
     
-    # criterion = nn.CrossEntropyLoss()
     criterion = nn.MSELoss()
-    # optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
     log_dir = get_summary_writer_log_dir(args)
     print(f"Writing logs to {log_dir}")
@@ -152,40 +150,40 @@ class CNN(nn.Module):
         super().__init__()
         self.input_shape = ImageShape(height=height, width=width, channels=channels)
 
+        # define conv layers
         self.conv1 = nn.Conv2d(
             in_channels=self.input_shape.channels,
             out_channels=32,
             kernel_size=(5, 5),
             padding=2,
         )
-        self.initialise_layer(self.conv1)
-
-        self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
-
         self.conv2 = nn.Conv2d(
             in_channels=32,
             out_channels=64,
             kernel_size=(3, 3),
             padding=1,
         )
-        self.initialise_layer(self.conv2)
-
-        self.pool2 = nn.MaxPool2d(kernel_size=(3, 3), stride=2)
-
         self.conv3 = nn.Conv2d(
             in_channels=64,
             out_channels=128,
             kernel_size=(3, 3),
             padding=1,
         )
-        self.initialise_layer(self.conv3)
 
+        # define max pool
+        self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
+        self.pool2 = nn.MaxPool2d(kernel_size=(3, 3), stride=2)
         self.pool3 = nn.MaxPool2d(kernel_size=(3, 3), stride=2)
 
-        self.fc1 = nn.Linear(11*11*128, 4608) # check why we get 11x11 and paper gets 10x10
-        self.initialise_layer(self.fc1)
-
+        # define fully connected
+        self.fc1 = nn.Linear(11*11*128, 4608) 
         self.fc2 = nn.Linear(2304, 2304)
+
+        self.initialise_layer(self.conv2)
+        self.initialise_layer(self.conv1)
+        self.initialise_layer(self.conv3)
+
+        self.initialise_layer(self.fc1)
         self.initialise_layer(self.fc2)
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
@@ -245,26 +243,28 @@ class Trainer:
         log_frequency: int = 5,
         start_epoch: int = 0
     ):
-        learning_rates = np.linspace(0.03, 0.0001,epochs)
+
+        learning_rates = np.linspace(0.03, 0.0001,epochs) # decreasing gradient
+
         for epoch in range(start_epoch, epochs):
             self.model.train()
             data_load_start_time = time.time()
+
             for batch, labels in self.train_loader:
                 
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] = learning_rates[epoch]
 
+                # send to gpu
                 batch = batch.to(self.device)
                 labels = labels.to(self.device)
+
                 data_load_end_time = time.time()
 
                 self.optimizer.zero_grad()
                 logits = self.model.forward(batch)
-
                 loss = self.criterion(logits, labels)
-
                 loss.backward()
-
                 self.optimizer.step()
 
                 data_load_time = data_load_end_time - data_load_start_time
